@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'live_qr_scanner_screen.dart';
 import '../models/worker.dart';
 import '../services/worker_service.dart';
 import '../services/dosimetry_service.dart';
@@ -157,36 +158,50 @@ class _ScannerScreenState extends State<ScannerScreen> {
   // ─── STEP 1: QR IMAGE DECODING & VERIFICATION ──────────────────────────────
   Future<void> _verifyQrViaImage(ImageSource source) async {
     try {
-      // 1. Pick ORIGINAL image directly without quality loss
-      final picked = await _picker.pickImage(source: source, imageQuality: 100);
-      if (picked == null) return;
-
-      setState(() {
-        _isDecodingQr = true;
-      });
-      _showSnack('Scanning image for DoseBand QR code…');
-
-      final file = File(picked.path);
-      final rawFileBytes = await file.readAsBytes();
-
-      // 2. Multi-stage QR Decoder directly on the original file
-      final decodeResult = await decodeQrFromImage(file);
-
-      setState(() {
-        _qrImageBytes = rawFileBytes;
-        _qrImageFileName = picked.name;
-        _lastQrDecodeResult = decodeResult;
-        _isDecodingQr = false;
-      });
-
-      // 3. If rawValue is found -> perform worker validation
-      if (decodeResult.detected && decodeResult.rawValue != null && decodeResult.rawValue!.trim().isNotEmpty) {
-        final res = await _workerService.verifyBadge(rawPayload: decodeResult.rawValue);
-        _handleQrVerificationResponse(res);
+      if (source == ImageSource.camera) {
+        // Launch live QR scanner
+        final String? rawPayload = await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const LiveQrScannerScreen()),
+        );
+        
+        if (rawPayload != null && rawPayload.isNotEmpty) {
+          _showSnack('Verifying QR...');
+          final res = await _workerService.verifyBadge(rawPayload: rawPayload);
+          _handleQrVerificationResponse(res);
+        }
       } else {
-        // No QR detected in the image
-        setState(() => _identifiedWorker = null);
-        _showSnack('No QR code detected in this image.', isError: true);
+        // 1. Pick ORIGINAL image directly without quality loss for gallery upload
+        final picked = await _picker.pickImage(source: source, imageQuality: 100);
+        if (picked == null) return;
+
+        setState(() {
+          _isDecodingQr = true;
+        });
+        _showSnack('Scanning image for DoseBand QR code…');
+
+        final file = File(picked.path);
+        final rawFileBytes = await file.readAsBytes();
+
+        // 2. Multi-stage QR Decoder directly on the original file
+        final decodeResult = await decodeQrFromImage(file);
+
+        setState(() {
+          _qrImageBytes = rawFileBytes;
+          _qrImageFileName = picked.name;
+          _lastQrDecodeResult = decodeResult;
+          _isDecodingQr = false;
+        });
+
+        // 3. If rawValue is found -> perform worker validation
+        if (decodeResult.detected && decodeResult.rawValue != null && decodeResult.rawValue!.trim().isNotEmpty) {
+          final res = await _workerService.verifyBadge(rawPayload: decodeResult.rawValue);
+          _handleQrVerificationResponse(res);
+        } else {
+          // No QR detected in the image
+          setState(() => _identifiedWorker = null);
+          _showSnack('No QR code detected in this image.', isError: true);
+        }
       }
     } catch (e) {
       setState(() => _isDecodingQr = false);

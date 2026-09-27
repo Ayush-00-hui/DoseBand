@@ -1,4 +1,5 @@
 """
+
 DoseBand Dose Estimation Module - Machine Learning Model for H2S Cumulative Exposure.
 
 This module fits a 2nd-degree Polynomial Regression model mapping optical staining intensity
